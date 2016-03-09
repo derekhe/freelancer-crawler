@@ -16,6 +16,8 @@
     "async": "^1.5.2",
     "fs-extra": "^0.26.5",
     "log4js": "^0.6.32",
-    "request": "^2.69.0"
+    "mongodb": "^2.1.7",
+    "request": "^2.69.0",
+    "socks5-https-client": "^1.0.2"
   }
 }
