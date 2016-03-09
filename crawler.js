@@ -8,33 +8,52 @@ var Agent = require('socks5-https-client/lib/Agent');
 fs.ensureDir("./out");
 
 var q = async.queue(function (id, callback) {
-    var filename = `out/${id}.json`;
+    var folder = Math.round(id / 10000);
 
-    if (fs.existsSync(filename)) {
+    fs.ensureDir(`./out/${folder}`)
+    var projectFileName = `out/${folder}/${id}-project.json`;
+    var bidsFileName = `out/${folder}/${id}-bids.json`;
+
+    if (fs.existsSync(projectFileName)) {
         console.log("Skip " + id);
         q.push(id + 1);
         callback();
         return
     }
 
-    var url = `https://www.freelancer.com/api/projects/0.1/projects/${id}/?compact=true&full_description=true&job_details=true&location_details=true&selected_bids=true&upgrade_details=true&user_avatar=true&user_details=true&user_employer_reputation=true&user_reputation=true&user_status=true`
-    logger.info(url);
+    var projectUrl = `https://www.freelancer.com/api/projects/0.1/projects/${id}/?compact=true&full_description=true&job_details=true&location_details=true&selected_bids=true&upgrade_details=true&user_avatar=true&user_details=true&user_employer_reputation=true&user_reputation=true&user_status=true`
     q.push(id + 1);
-    request({
-        url: url, agentClass: Agent, agentOptions: {
+    var options = {
+        url: projectUrl,
+        agentClass: Agent, agentOptions: {
             socksHost: "localhost",
             socksPort: "9050"
         },
-    }, function (error, response, body) {
+    };
+
+    options.url = projectUrl;
+    request(options, function (error, response, body) {
         if (!error && response.statusCode == 200) {
-            logger.info("DONE", url);
-            fs.writeJSON(filename, JSON.parse(body));
-            callback();
+            logger.info("Get project", projectUrl);
+            fs.writeJSON(projectFileName, JSON.parse(body));
+
+            var bidsUrl = `https://www.freelancer.com/api/projects/0.1/projects/${id}/bids/?compact=true&offset=0&reputation=true&user_avatar=true&user_details=true`;
+            options.url = bidsUrl;
+            request(options, function (error, response, body) {
+                    if (!error && response.statusCode == 200) {
+                        logger.info("Get bids", bidsUrl);
+                        fs.writeJSON(bidsFileName, JSON.parse(body));
+                        callback();
+                    } else {
+                        callback(error, response);
+                    }
+                }
+            );
         } else {
             callback(error, response);
         }
     });
-}, 30);
+}, 100);
 
 
 q.drain = function () {
