@@ -4,13 +4,19 @@ var request = require('request');
 var async = require('async');
 var logger = require("log4js").getDefaultLogger();
 var Agent = require('socks5-https-client/lib/Agent');
+var moment = require('moment');
+var exec = require('child_process').exec;
 
 fs.ensureDir("./out");
+var progressFileName = "progress.json";
+var start = moment.now();
+var finished = 0
 
 var q = async.queue(function (id, callback) {
-    var folder = Math.round(id / 10000);
+    id = parseInt(id);
+    console.log(`Getting ${id}`);
+    var folder = Math.floor(id / 10000);
 
-    fs.ensureDir(`./out/${folder}`)
     var projectFileName = `out/${folder}/${id}-project.json`;
     var bidsFileName = `out/${folder}/${id}-bids.json`;
 
@@ -28,21 +34,29 @@ var q = async.queue(function (id, callback) {
         agentClass: Agent, agentOptions: {
             socksHost: "localhost",
             socksPort: "9050"
-        },
+        }
     };
 
     options.url = projectUrl;
     request(options, function (error, response, body) {
         if (!error && response.statusCode == 200) {
             logger.info("Get project", projectUrl);
-            fs.writeJSON(projectFileName, JSON.parse(body));
+            fs.ensureDir(`./out/${folder}`);
+            fs.writeJson(projectFileName, JSON.parse(body));
 
             var bidsUrl = `https://www.freelancer.com/api/projects/0.1/projects/${id}/bids/?compact=true&offset=0&reputation=true&user_avatar=true&user_details=true`;
             options.url = bidsUrl;
             request(options, function (error, response, body) {
                     if (!error && response.statusCode == 200) {
                         logger.info("Get bids", bidsUrl);
-                        fs.writeJSON(bidsFileName, JSON.parse(body));
+                        fs.ensureDir(`./out/${folder}`);
+                        fs.writeJson(bidsFileName, JSON.parse(body));
+                        fs.writeJsonSync(progressFileName, {id: id});
+                        finished++;
+                        var timeSpend = (moment.now() - start) / 1000;
+
+                        var rate = finished / timeSpend;
+                        console.log(`Finished: ${finished}  Time: ${timeSpend}  Speed: ${rate}/s ${rate * 3600}/hour`);
                         callback();
                     } else {
                         callback(error, response);
@@ -60,8 +74,14 @@ q.drain = function () {
     logger.info('all items have been processed');
 };
 
-q.push(1, function (error, response) {
+var progress = fs.readJsonSync(progressFileName);
+console.log(`Resume from ${progress.id}`);
+q.push(progress.id, function (error, response) {
     if (!error && !response) {
         console.log(error, response);
     }
 });
+
+setTimeout(function () {
+    process.exit(0)
+}, 60 * 60 * 1000);
